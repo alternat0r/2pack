@@ -1,0 +1,14 @@
+[v] Version 1.21.0  (minor auto-incremented)
+[1/4] Compiling version resource...
+[2/4] Building 2pack.exe (x64 compressor, static CRT)...
+[3/4] Building stub64.exe (x64 unpacker, no CRT)...
+[4/4] Building stub32.exe (x86 unpacker, no CRT)...
+
+============================================================
+ Build complete.  Output in E:\projects\2pack\bin :
+============================================================
+2pack.exe
+stub32.exe
+stub64.exe
+test_go.exe
+test_rust.exe
