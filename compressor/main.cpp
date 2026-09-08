@@ -61,6 +61,12 @@ int main(int argc, char** argv) {
 
     PeInfo info;
     if (!inspect_pe(original, info, err)) { fprintf(stderr, "error: not a valid PE: %s\n", err.c_str()); return 1; }
+    if (info.is_managed) {
+        fprintf(stderr, "error: managed (.NET/CLR) executable is not supported.\n");
+        fprintf(stderr, "       2pack's stub maps the PE manually and does not bootstrap the CLR\n");
+        fprintf(stderr, "       runtime, so a packed managed binary cannot run.\n");
+        return 1;
+    }
 
     std::string stub_path = stub_dir + (info.is64 ? "\\stub64.exe" : "\\stub32.exe");
     std::vector<uint8_t> stub;

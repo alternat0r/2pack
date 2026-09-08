@@ -12,6 +12,7 @@
 
 struct PeInfo {
     bool     is64 = false;      /* PE32+ (x64) vs PE32 (x86)          */
+    bool     is_managed = false;/* has a CLR header (managed/.NET)    */
     uint16_t machine = 0;       /* IMAGE_FILE_MACHINE_*               */
     uint16_t subsystem = 0;     /* IMAGE_SUBSYSTEM_*                  */
 };

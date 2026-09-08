@@ -60,12 +60,24 @@ bool inspect_pe(const std::vector<uint8_t>& image, PeInfo& info, std::string& er
     info.machine = nt->FileHeader.Machine;
     WORD magic = nt->OptionalHeader.Magic;
     info.is64 = (magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC);
+    /* Managed (.NET/CLR) images: the CLR runtime is bootstrapped by the Windows
+     * loader, which our manual stub does not replicate. Detect via the COM
+     * descriptor (CLR header) data directory (index 14).
+     *
+     * NOTE: read subsystem + CLR dir through the bitness-specific struct. In this
+     * SDK `IMAGE_NT_HEADERS` is a conditional typedef that is ALWAYS the 64-bit
+     * struct on an x64 compiler, so reading `nt->OptionalHeader.<field>` for an
+     * x86 image uses the wrong offsets (a false "managed" result). */
     if (info.is64) {
         auto* nt64 = (IMAGE_NT_HEADERS64*)nt;
         info.subsystem = nt64->OptionalHeader.Subsystem;
+        info.is_managed = (nt64->OptionalHeader.NumberOfRvaAndSizes > 14) &&
+                          (nt64->OptionalHeader.DataDirectory[14].Size != 0);
     } else {
         auto* nt32 = (IMAGE_NT_HEADERS32*)nt;
         info.subsystem = nt32->OptionalHeader.Subsystem;
+        info.is_managed = (nt32->OptionalHeader.NumberOfRvaAndSizes > 14) &&
+                          (nt32->OptionalHeader.DataDirectory[14].Size != 0);
     }
     return true;
 }
