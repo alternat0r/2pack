@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="docs/logo.png" alt="2pack" width="240">
+  <img src="docs/logo.png" alt="2pack" width="340">
 </p>
 
 # 2pack
 
-A tiny, portable **Windows executable compressor** built with Visual C++ 2019.
+A tiny, portable **Windows executable compressor** from my old project.
 It uses the **LZMA** algorithm (7‑zip LZMA SDK) to shrink a `.exe` into a
 self‑extracting, single‑file executable.
 
