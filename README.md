@@ -200,6 +200,31 @@ PE, but it covers the common cases:
   forwarded exports, no CET/CFG shadow‑stack fixups.
 * LZMA level 9 with a 64 MiB dictionary is used for the best ratio; on very
   large inputs this is memory‑hungry (the encoder can use several hundred MB).
+* **Minimum input size.** There is no arbitrary size floor — 2pack will pack a
+  PE of any size as long as it is a *valid* PE. The only hard gates are the
+  structural ones: the file must be at least `sizeof(IMAGE_DOS_HEADER)` (64
+  bytes) and carry a reachable, well‑formed PE header. Files smaller than that
+  are rejected with `file too small for DOS header` / `e_lfanew out of range`.
+
+## Disclaimer
+
+2pack is provided **as‑is, without warranty of any kind**. By using it you accept
+full responsibility for how you use it.
+
+* **Abuse is on you.** This tool shrinks, repacks, and can be used to obfuscate
+  executables. It can be used for perfectly legitimate purposes *or* for
+  malicious ones. The author makes no claim about how you will use it and takes
+  **no responsibility** for any abuse, misuse, or damage caused by this software.
+* **Successful compression ≠ a working program.** 2pack reports success when it
+  has written a valid packed file; it does **not** execute or test the result. A
+  packed binary can still fail at run time for reasons 2pack cannot see — an
+  unsupported PE feature, a missing dependency, an anti‑tamper / integrity check,
+  or a loader behavior the minimal stub does not replicate. **Always run and test
+  the packed output yourself before relying on it.**
+* No warranty, express or implied, is made regarding fitness for a particular
+  purpose, merchantability, or non‑infringement. The author is not liable for any
+  loss of data, revenue, or functionality resulting from the use — or the
+  inability to use — this software.
 
 ## Credits
 
