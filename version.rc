@@ -1,8 +1,8 @@
 #include <windows.h>
 
 1 VERSIONINFO
-FILEVERSION     1,23,0,0
-PRODUCTVERSION  1,23,0,0
+FILEVERSION     1,24,0,0
+PRODUCTVERSION  1,24,0,0
 FILEOS          VOS_NT_WINDOWS32
 FILETYPE        VFT_APP
 BEGIN
@@ -12,8 +12,8 @@ BEGIN
         BEGIN
             VALUE "FileDescription",  "2pack - portable Windows executable compressor"
             VALUE "ProductName",      "2pack"
-            VALUE "FileVersion",      "1.23.0"
-            VALUE "ProductVersion",   "1.23.0"
+            VALUE "FileVersion",      "1.24.0"
+            VALUE "ProductVersion",   "1.24.0"
             VALUE "LegalCopyright",   "Public domain"
         END
     END
