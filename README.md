@@ -4,7 +4,7 @@
 
 # 2pack
 
-A tiny, portable **Windows executable compressor** from my old project.
+A tiny, portable **Windows executable compressor** from my old project with some enhancement.
 It uses the **LZMA** algorithm (7‑zip LZMA SDK) to shrink a `.exe` into a
 self‑extracting, single‑file executable.
 
