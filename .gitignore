@@ -1,0 +1,24 @@
+# ---- build artifacts ----
+obj/
+bin/
+*.exe
+*.obj
+*.res
+*.lib
+*.pdb
+*.idb
+
+# ---- packed / test outputs ----
+*.packed.exe
+tests/orig_out.txt
+tests/packed_out.txt
+tests/packtest_out.txt
+
+# ---- tooling / editor ----
+.vs/
+.vscode/
+.idea/
+*.user
+*.aps
+Thumbs.db
+desktop.ini
