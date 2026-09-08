@@ -86,6 +86,8 @@ rem ---- Regenerate version.rc from the new version ----
 > "%ROOT%version.rc" (
     echo #include ^<windows.h^>
     echo.
+    echo 1 ICON "%ROOT:\=/%docs/icon.ico"
+    echo.
     echo 1 VERSIONINFO
     echo FILEVERSION     %MAJ%,%MIN%,%PAT%,0
     echo PRODUCTVERSION  %MAJ%,%MIN%,%PAT%,0

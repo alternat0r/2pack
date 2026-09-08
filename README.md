@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/logo.png" alt="2pack" width="240">
+</p>
+
 # 2pack
 
 A tiny, portable **Windows executable compressor** built with Visual C++ 2019.
