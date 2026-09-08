@@ -7,6 +7,7 @@ bin/
 *.lib
 *.pdb
 *.idb
+*.log
 
 # ---- packed / test outputs ----
 *.packed.exe
@@ -24,3 +25,7 @@ Thumbs.db
 desktop.ini
 
 packtest_out.txt
+push.bat
+release.bat
+V-rust.exe
+V-build.log
