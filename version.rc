@@ -3,8 +3,8 @@
 1 ICON "E:/projects/2pack/docs/icon.ico"
 
 1 VERSIONINFO
-FILEVERSION     1,27,0,0
-PRODUCTVERSION  1,27,0,0
+FILEVERSION     1,32,0,0
+PRODUCTVERSION  1,32,0,0
 FILEOS          VOS_NT_WINDOWS32
 FILETYPE        VFT_APP
 BEGIN
@@ -14,8 +14,8 @@ BEGIN
         BEGIN
             VALUE "FileDescription",  "2pack - portable Windows executable compressor"
             VALUE "ProductName",      "2pack"
-            VALUE "FileVersion",      "1.27.0"
-            VALUE "ProductVersion",   "1.27.0"
+            VALUE "FileVersion",      "1.32.0"
+            VALUE "ProductVersion",   "1.32.0"
             VALUE "LegalCopyright",   "Public domain"
         END
     END
