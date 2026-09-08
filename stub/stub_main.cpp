@@ -59,7 +59,15 @@ static int debug_on() {
 }
 
 static void dbg(const char* m) {
-    OutputDebugStringA(m);
+    /* Diagnostics go to stderr, only when PACK2_DEBUG is set, so a packed
+     * binary is byte-identical to the original by default.
+     *
+     * Note: we deliberately do NOT call OutputDebugStringA here. In this
+     * no-CRT (/NODEFAULTLIB) stub the process heap is never initialized,
+     * and OutputDebugStringA reaches RtlAllocateHeap when a debugger is
+     * attached (via CreateDBWinMutex -> RtlAllocateAndInitializeSid) and
+     * faults on the NULL heap. The stderr write below uses only kernel32
+     * (GetStdHandle/WriteFile) and never touches the heap. */
     if (!debug_on()) return;
     HANDLE h = GetStdHandle(STD_ERROR_HANDLE);
     if (h && h != INVALID_HANDLE_VALUE) {
@@ -367,9 +375,11 @@ static void resolve_imports(BYTE* base) {
 /*  - MSVC: all four fields are RVAs.                                   */
 /*  - Go:   all four fields are ABSOLUTE addresses (preferred base +    */
 /*    RVA). Go also allocates a TLS index ABOVE the 1024 fixed TEB      */
-/*    slots (handled by TlsExpansion), and its runtime invokes its own  */
-/*    TLS callbacks (the PE callback list is NULL-terminated at entry   */
-/*    0), so the stub must NOT call them for Go images.                 */
+/*    slots (handled by TlsExpansion).                                  */
+/*                                                                      */
+/* Both MSVC and Go images carry real PE TLS callbacks that the Windows */
+/* loader invokes at process init, so the stub must invoke them too     */
+/* (after relocations + imports, once the index/block are set up).      */
 /*                                                                      */
 /* We auto-detect: if every field is a valid RVA we treat them as RVAs, */
 /* otherwise as absolute addresses (base + delta). We use TlsSetValue   */
@@ -426,35 +436,101 @@ static void setup_tls(BYTE* base, ULONG_PTR mappedBase, const OptFields& f) {
     SIZE_T rawSize = (SIZE_T)(endRva - startRva);
     SIZE_T total   = rawSize + zerofill;
 
-    /* Writable per-thread block with the image's initial TLS values. */
+    /* Writable per-thread block with the image's initial TLS values.
+     *
+     * Allocate 8 EXTRA bytes before the block and publish (alloc+8) as the
+     * block pointer. The loader's LdrpHandleTlsData (run on worker threads
+     * during background module loads) stores the per-module TLS vector it
+     * reads from TLP[index] and, on thread teardown, frees it via
+     *   r8 = [vector-8];  RtlFreeHeap(LdrpTlsHeap, 0, r8);
+     * A page-aligned VirtualAlloc block has [block-8] in the previous
+     * UNMAPPED page → access violation. By reserving an 8-byte prefix,
+     * [block-8] is readable and zero (MEM_COMMIT pages are zero-init), so
+     * RtlFreeHeap(LdrpTlsHeap, 0, 0) is a no-op and the loader proceeds. */
     BYTE* block = nullptr;
     if (total) {
-        block = (BYTE*)VirtualAlloc(nullptr, total, MEM_COMMIT, PAGE_READWRITE);
-        if (!block) fail("out of memory allocating TLS block");
+        BYTE* alloc = (BYTE*)VirtualAlloc(nullptr, total + 8, MEM_COMMIT, PAGE_READWRITE);
+        if (!alloc) fail("out of memory allocating TLS block");
+        block = alloc + 8;
         if (rawSize) memcpy(block, base + startRva, rawSize);
     }
 
-    DWORD index = TlsAlloc();
-    if (!index) fail("TlsAlloc failed");
+    /* Choose a TLS slot and publish the block in the TEB.
+     *
+     * We deliberately do NOT call TlsAlloc/TlsSetValue. This is a no-CRT
+     * (/NODEFAULTLIB) stub, so the process heap is never initialized;
+     * TlsAlloc reaches RtlAllocateHeap (to grow the TlsExpansion array)
+     * and faults on the NULL heap. Instead we do exactly what the Windows
+     * loader does for fixed slots: scan the TEB's TlsSlots array for a free
+     * (NULL) slot and store the block pointer there directly. The app's TLS
+     * callbacks (Rust std, MSVC CRT, Go) fetch the block with a raw
+     * `gs:[TlsSlots + index*8]` read, so the block must physically sit in
+     * that array slot. We publish the chosen index in the image's
+     * AddressOfIndex variable, so the callbacks read the slot we filled. */
+    {
+        /* Publish the per-thread block where the app's TLS callback reads it.
+         *
+         * The callback (Rust std / MSVC CRT) does a DOUBLE indirection:
+         *   TLP = gs:[0x58]            ; TEB->ThreadLocalStoragePointer
+         *   block = TLP[index]         ; index from the image's AddressOfIndex
+         * In this process TLP is a per-thread heap array that is DISTINCT from
+         * the embedded TEB->TlsSlots array (TEB+0x1480 on x64). TlsSetValue
+         * writes the embedded array, so it does NOT satisfy the callback. We
+         * therefore do three things, all for the same index:
+         *   1. TlsAlloc()      -> sets the PEB TlsBitmap bit, so the loader's
+         *                          LdrpHandleTlsData (which runs on worker
+         *                          threads) knows the slot is taken. Without
+         *                          this, a direct TLP write left the bitmap
+         *                          stale and a worker thread crashed on exit.
+         *   2. TlsSetValue()   -> writes the embedded TlsSlots[index].
+         *   3. TLP[index]=blk  -> writes the array the callback actually reads.
+         * For the first 64 slots TlsAlloc is bitmap-only (no RtlAllocateHeap),
+         * so it is safe in this no-CRT stub. */
+        DWORD index = TlsAlloc();
+        if (index == TLS_OUT_OF_INDEXES)
+            fail("TlsAlloc failed");
+        if (block) {
+            TlsSetValue(index, block);
+#ifdef _M_X64
+            BYTE* teb = (BYTE*)(ULONG_PTR)__readgsqword(0x30);
+            ULONG_PTR tlp = *(ULONG_PTR*)(teb + 0x58);   /* ThreadLocalStoragePointer */
+            if (tlp) ((ULONG_PTR*)tlp)[index] = (ULONG_PTR)block;
+#endif
+        }
+        /* Publish the index where the app's runtime expects it. */
+        if (is64) *(DWORD64*)(base + idxRva) = (DWORD64)index;
+        else      *(DWORD*)  (base + idxRva) = (DWORD)  index;
+    }
 
-    /* Publish the index where the app's runtime expects it. */
-    if (is64) *(DWORD64*)(base + idxRva) = (DWORD64)index;
-    else      *(DWORD*)  (base + idxRva) = (DWORD)  index;
-
-    /* Place the block in the TEB. TlsSetValue handles both the fixed
-     * TlsSlots array (index < 1024) and the TlsExpansion arrays above it,
-     * so Go's high indices work without manual TEB surgery. */
-    if (block && !TlsSetValue(index, block))
-        fail("TlsSetValue failed");
-
-    /* NOTE: TLS callbacks are intentionally NOT invoked here.
-     *  - MSVC images: the MSVC CRT does not rely on PE TLS callbacks for
-     *    its own init, so skipping them is safe.
-     *  - Go images: Go's runtime calls its own TLS callbacks (itab/func
-     *    linking) during its startup; the PE callback list is
-     *    NULL-terminated at entry 0, so the Windows loader would not call
-     *    them either. Invoking them from the stub would double-initialize
-     *    and crash. */
+    /* Invoke the image's TLS callbacks, exactly as the Windows loader does
+     * at process/thread init: after relocations and imports are applied and
+     * after the index + per-thread block are in place. The callbacks are
+     * already relocated (apply_relocations ran earlier), so calling them
+     * directly is safe. They run while the image is still fully writable.
+     *
+     * This is required for MSVC images (the MSVC CRT performs its TLS init
+     * here) and for Go images (the Go runtime registers PE TLS callbacks
+     * that the loader invokes at startup). The callback array is
+     * NULL-terminated; an empty/absent list is a no-op. */
+    ULONG_PTR cbRva = toRva(addrOfCallbacks);
+    if (cbRva) {
+        typedef void (WINAPI *TlsCbFn)(ULONG_PTR, DWORD, LPVOID);
+        SIZE_T cbCount = 0;
+        const ULONG_PTR* cbs = (const ULONG_PTR*)(base + cbRva);
+        while (cbs[cbCount] != 0) {
+            if (cbCount >= 0x1000) break;   /* sanity cap */
+            ++cbCount;
+        }
+        for (SIZE_T i = 0; i < cbCount; ++i) {
+            TlsCbFn cb = (TlsCbFn)(base + toRva(cbs[i]));
+            dbg("2pack stub: tls callback\n");
+            /* Match the loader: process-attach then thread-attach. The
+             * per-thread init actually runs on reason 3 (THREAD_ATTACH);
+             * reason 2 (PROCESS_ATTACH) is typically a no-op. */
+            cb((ULONG_PTR)base, 2 /* TLS_PROCESS */, nullptr);
+            cb((ULONG_PTR)base, 3 /* TLS_THREAD  */, nullptr);
+        }
+    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -489,10 +565,16 @@ extern "C" int main(void) {
     dbg("2pack stub: relocations done\n");
     resolve_imports(base);
     dbg("2pack stub: imports done\n");
-    setup_tls(base, mappedBase, f);
-    dbg("2pack stub: tls done\n");
+    /* Set final section protections BEFORE the TLS callbacks: the callbacks
+     * execute code in .text, which must already be executable. Relocations
+     * and import fixups (the only things that write into the image) are done,
+     * so it is safe to make .rdata/.text read-only/executable now. This
+     * matches the Windows loader, which maps .text executable before running
+     * TLS callbacks. */
     set_protections(base);
     dbg("2pack stub: protections set\n");
+    setup_tls(base, mappedBase, f);
+    dbg("2pack stub: tls done\n");
 
     typedef int (WINAPI *EntryFn)(void);
     EntryFn entry = (EntryFn)(base + f.entryRVA);
